@@ -79,7 +79,7 @@ def main():
     # Convert to Eastern Time for display
     eastern = pytz.timezone('US/Eastern')
     target_time_est = target_time.astimezone(eastern)
-    display_time_str = target_time_est.strftime("%H:00 %Z")
+    display_time_str = target_time_est.strftime("%I:00 %p %Z")
     
     print(f"Checking events for: {target_hour_str} UTC ({display_time_str})")
 
