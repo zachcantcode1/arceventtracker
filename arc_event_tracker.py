@@ -1,11 +1,22 @@
 import requests
 import json
 import pytz
+import base64
+import os
+import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
+from PIL import Image, ImageDraw, ImageFont
+
+# Fix Windows console encoding for emojis
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # Configuration
 API_URL = "https://metaforge.app/api/arc-raiders/event-timers"
 IFTTT_WEBHOOK_URL = "https://maker.ifttt.com/trigger/arc_map_events/with/key/pKdYziVhD9mH4gce0Odd-KYga4f6e9EOES1zlqFZjh1"
+IMGBB_API_KEY = "e91681dfbd5603c4ee3e7030945eeaf0"
+BASE_IMAGE_PATH = os.path.join(os.path.dirname(__file__), "arcevents.png")
 
 def get_events():
     try:
@@ -51,8 +62,136 @@ def format_message(events, display_time_str):
     
     return message
 
-def send_webhook(message):
+def generate_event_image(events, display_time_str):
+    """
+    Generate an image with event data overlaid on the base image.
+    Returns the path to the generated image.
+    """
+    # Load the base image
+    img = Image.open(BASE_IMAGE_PATH)
+    draw = ImageDraw.Draw(img)
+    
+    # Get image dimensions
+    width, height = img.size
+    
+    # Try to use Impact font for bold headlines
+    try:
+        # Use Impact font with larger sizes for social media visibility
+        title_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 52)
+        event_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 38)
+        map_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 30)
+    except OSError:
+        try:
+            # Linux fallback
+            title_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 52)
+            event_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 38)
+            map_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 30)
+        except OSError:
+            try:
+                # Another Linux path
+                title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
+                event_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
+                map_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
+            except OSError:
+                # Final fallback
+                title_font = ImageFont.load_default()
+                event_font = ImageFont.load_default()
+                map_font = ImageFont.load_default()
+    
+    # Prepare the text
+    title = f"EVENTS STARTING AT {display_time_str.upper()}"
+    
+    # Calculate center position for text
+    center_x = width // 2
+    start_y = height // 4  # Start higher up
+    
+    # Draw title centered with accent color #2fff7e
+    title_bbox = draw.textbbox((0, 0), title, font=title_font)
+    title_width = title_bbox[2] - title_bbox[0]
+    title_x = center_x - title_width // 2
+    draw.text((title_x, start_y), title, font=title_font, fill=(47, 255, 126))
+    
+    # Draw a subtle separator line
+    line_y = start_y + 70
+    line_margin = 100  # Increased margin to keep line inside text area
+    draw.line([(line_margin, line_y), (width - line_margin, line_y)], fill=(255, 255, 255, 128), width=2)
+    
+    # Draw events with better spacing
+    y_offset = start_y + 100
+    for i, event in enumerate(events):
+        event_text = event['name']
+        map_text = f"on {event['map']}"
+        
+        # Event name - white
+        event_bbox = draw.textbbox((0, 0), event_text, font=event_font)
+        event_width = event_bbox[2] - event_bbox[0]
+        event_x = center_x - event_width // 2
+        draw.text((event_x, y_offset), event_text, font=event_font, fill=(255, 255, 255))
+        
+        y_offset += 48
+        
+        # Map name - cyan color #2ffeff
+        map_bbox = draw.textbbox((0, 0), map_text, font=map_font)
+        map_width = map_bbox[2] - map_bbox[0]
+        map_x = center_x - map_width // 2
+        draw.text((map_x, y_offset), map_text, font=map_font, fill=(47, 254, 255))
+        
+        y_offset += 65  # More spacing between events
+    
+    # Save to a temporary file
+    temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+    img.save(temp_file.name, 'PNG')
+    temp_file.close()
+    
+    # Also save a copy locally for debugging
+    debug_path = os.path.join(os.path.dirname(__file__), "generated_event_image.png")
+    img.save(debug_path, 'PNG')
+    print(f"Debug image saved to: {debug_path}")
+    
+    return temp_file.name
+
+def upload_image_to_imgbb(image_path):
+    """
+    Upload an image to imgbb and return the public URL.
+    """
+    try:
+        with open(image_path, 'rb') as img_file:
+            image_data = base64.b64encode(img_file.read()).decode('utf-8')
+        
+        response = requests.post(
+            "https://api.imgbb.com/1/upload",
+            data={
+                "key": IMGBB_API_KEY,
+                "image": image_data,
+                "name": f"arc_events_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            }
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get('success'):
+            image_url = result['data']['url']
+            print(f"Image uploaded successfully: {image_url}")
+            return image_url
+        else:
+            print(f"Failed to upload image: {result}")
+            return None
+            
+    except requests.RequestException as e:
+        print(f"Error uploading image: {e}")
+        return None
+    finally:
+        # Clean up temp file
+        try:
+            os.unlink(image_path)
+        except:
+            pass
+
+def send_webhook(message, image_url=None):
     payload = {"value1": message}
+    if image_url:
+        payload["value2"] = image_url
+    
     try:
         response = requests.post(IFTTT_WEBHOOK_URL, json=payload)
         response.raise_for_status()
@@ -91,7 +230,16 @@ def main():
         print(message)
         
         if events:
-            send_webhook(message)
+            # Generate image with event data
+            print("Generating event image...")
+            image_path = generate_event_image(events, display_time_str)
+            
+            # Upload image to imgbb
+            print("Uploading image to imgbb...")
+            image_url = upload_image_to_imgbb(image_path)
+            
+            # Send webhook with message and image URL
+            send_webhook(message, image_url)
         else:
             print("No events found, skipping webhook.")
 
