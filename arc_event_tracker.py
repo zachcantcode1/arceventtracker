@@ -56,11 +56,7 @@ def format_message(events, display_time_str):
     if not events:
         return f"No map events starting at {display_time_str}."
     
-    message = f"🗺️ ARC Raiders Map Events starting now! ({display_time_str})\n\n"
-    for event in events:
-        message += f"- {event['name']} on {event['map']}\n"
-    
-    return message
+    return f"🗺️ ARC Raiders Map Events starting now! ({display_time_str})"
 
 def generate_event_image(events, display_time_str):
     """
@@ -77,19 +73,19 @@ def generate_event_image(events, display_time_str):
     # Try to use Impact font for bold headlines
     try:
         # Use Impact font with larger sizes for social media visibility
-        title_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 52)
+        title_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 40)
         event_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 38)
         map_font = ImageFont.truetype("C:/Windows/Fonts/impact.ttf", 30)
     except OSError:
         try:
             # Linux fallback
-            title_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 52)
+            title_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 40)
             event_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 38)
             map_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 30)
         except OSError:
             try:
                 # Another Linux path
-                title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
+                title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
                 event_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
                 map_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
             except OSError:
