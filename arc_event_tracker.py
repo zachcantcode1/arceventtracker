@@ -13,7 +13,7 @@ if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
 # Configuration
-API_URL = "https://metaforge.app/api/arc-raiders/event-timers"
+API_URL = "https://metaforge.app/api/arc-raiders/events-schedule"
 IFTTT_WEBHOOK_URL = "https://maker.ifttt.com/trigger/arc_map_events/with/key/pKdYziVhD9mH4gce0Odd-KYga4f6e9EOES1zlqFZjh1"
 IMGBB_API_KEY = "e91681dfbd5603c4ee3e7030945eeaf0"
 BASE_IMAGE_PATH = os.path.join(os.path.dirname(__file__), "arcevents.png")
@@ -27,29 +27,36 @@ def get_events():
         print(f"Error fetching events: {e}")
         return None
 
-def filter_events_for_hour(data, target_hour_str):
+def filter_events_for_hour(data, target_time):
     """
-    Filters events that start at the target hour (format "HH:00").
+    Filters events that start within the target hour.
+    target_time should be a datetime object representing the start of the hour (UTC).
     """
     upcoming_events = []
     if not data or 'data' not in data:
         return upcoming_events
 
+    # Calculate the start and end timestamps for the target hour (in milliseconds)
+    target_start_ms = int(target_time.timestamp() * 1000)
+    target_end_ms = int((target_time + timedelta(hours=1)).timestamp() * 1000)
+
     for item in data['data']:
-        game = item.get('game')
         name = item.get('name')
         map_name = item.get('map')
-        times = item.get('times', [])
+        start_time_ms = item.get('startTime')
+        end_time_ms = item.get('endTime')
 
-        for time_slot in times:
-            start_time = time_slot.get('start')
-            if start_time == target_hour_str:
-                upcoming_events.append({
-                    "name": name,
-                    "map": map_name,
-                    "start": start_time,
-                    "end": time_slot.get('end')
-                })
+        # Check if event starts within the target hour
+        if start_time_ms and target_start_ms <= start_time_ms < target_end_ms:
+            # Convert timestamps to readable format for display
+            start_dt = datetime.fromtimestamp(start_time_ms / 1000, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end_time_ms / 1000, tz=timezone.utc)
+            upcoming_events.append({
+                "name": name,
+                "map": map_name,
+                "start": start_dt.strftime("%H:%M"),
+                "end": end_dt.strftime("%H:%M")
+            })
     return upcoming_events
 
 def format_message(events, display_time_str):
@@ -220,7 +227,7 @@ def main():
 
     data = get_events()
     if data:
-        events = filter_events_for_hour(data, target_hour_str)
+        events = filter_events_for_hour(data, target_time)
         message = format_message(events, display_time_str)
         print("Generated Message:")
         print(message)
